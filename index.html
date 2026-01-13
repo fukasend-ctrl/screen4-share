@@ -2,132 +2,59 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>NEXUS STREAMER PRO | HOST</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEXUS RECEIVER PRO</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        :root { --neon: #00ff41; --danger: #ff4141; --bg: #0a0a0c; }
-        body { background: var(--bg); color: var(--neon); font-family: 'Consolas', 'Courier New', monospace; margin: 0; padding: 20px; overflow-x: hidden; }
-        #status-bar { border: 1px solid var(--neon); padding: 10px 20px; border-radius: 4px; font-size: 13px; margin-bottom: 25px; background: rgba(0,255,65,0.05); text-transform: uppercase; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
-        .source-card { background: #111; border: 1px solid #333; border-radius: 8px; padding: 10px; cursor: pointer; transition: 0.2s; }
-        .source-card:hover { border-color: var(--neon); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,255,65,0.2); }
-        .source-card img { width: 100%; border-radius: 4px; margin-bottom: 8px; }
-        .source-card div { font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #live-container { display: none; }
-        video { width: 100%; max-width: 800px; border: 1px solid #444; border-radius: 8px; background: #000; }
-        .btn-stop { margin-top: 20px; padding: 12px 30px; background: transparent; border: 1px solid var(--danger); color: var(--danger); border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-stop:hover { background: var(--danger); color: #000; }
-        .hidden { display: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
+        #stream-img { width: 100vw; height: 100vh; object-fit: contain; display: block; }
+        #status { position: fixed; top: 15px; left: 15px; color: #00ff41; font-size: 11px; z-index: 100; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; pointer-events: none; border-left: 3px solid #00ff41; font-family: monospace; }
+        #overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); color: #00ff41; cursor: pointer; flex-direction: column; transition: 0.5s; text-align: center; }
+        .pulse { animation: pulse 2s infinite; font-weight: bold; letter-spacing: 2px; }
+        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+        .hidden { opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
-
-    <div id="status-bar">Initialize: System Ready</div>
-
-    <div id="view-selection">
-        <h2 style="font-size: 16px; letter-spacing: 2px;">SELECT BROADCAST SOURCE</h2>
-        <div id="sources" class="grid"></div>
+    <div id="status">SIGNAL STANDBY</div>
+    <div id="overlay">
+        <div class="pulse">TAP TO START SECURE STREAM</div>
+        <div style="font-size: 10px; margin-top: 10px; color: #666;">High-Quality 1080P/30FPS Mode</div>
     </div>
-
-    <div id="view-active" class="hidden">
-        <div style="color: var(--danger); font-weight: bold; margin-bottom: 10px;">● LIVE TRANSMITTING (1080P/30FPS)</div>
-        <video id="preview" autoplay muted playsinline></video>
-        <br>
-        <button class="btn-stop" onclick="NexusHost.stopStream()">TERMINATE STREAM</button>
-    </div>
-
-    <canvas id="buffer" class="hidden"></canvas>
-
+    <img id="stream-img">
 <script>
-    const { ipcRenderer } = require('electron');
-
-    const NexusHost = {
-        socket: io('http://127.0.0.1:3000', { transports: ['websocket'], reconnection: true }),
-        stream: null,
-        timer: null,
-        video: document.getElementById('preview'),
-        canvas: document.getElementById('buffer'),
-        
-        async init() {
-            this.socket.on('connect', () => this.updateStatus("✅ Online: Server Connected"));
-            this.socket.on('connect_error', () => this.updateStatus("⚠️ Offline: Connection Failed", true));
-            this.loadSources();
+    const NGROK_URL = 'https://excusive-ivelisse-creepiest.ngrok-free.dev'; 
+    const NexusReceiver = {
+        socket: null,
+        img: document.getElementById('stream-img'),
+        status: document.getElementById('status'),
+        overlay: document.getElementById('overlay'),
+        init() {
+            this.socket = io(NGROK_URL, { 
+                transports: ['websocket'], 
+                reconnection: true,
+                extraHeaders: { "ngrok-skip-browser-warning": "true" }
+            });
+            this.socket.on('connect', () => { this.status.innerText = "● LIVE (CONNECTED)"; });
+            this.socket.on('view-data', (data) => {
+                this.img.src = data;
+                this.status.innerText = "● LIVE (RECEIVING)";
+            });
+            this.socket.on('connect_error', () => { this.status.innerText = "⚠️ SIGNAL LOST"; });
+            this.overlay.addEventListener('click', () => this.activate());
         },
-
-        updateStatus(msg, isErr = false) {
-            const bar = document.getElementById('status-bar');
-            bar.innerText = msg;
-            bar.style.borderColor = isErr ? 'var(--danger)' : 'var(--neon)';
-            bar.style.color = isErr ? 'var(--danger)' : 'var(--neon)';
-        },
-
-        async loadSources() {
-            const sources = await ipcRenderer.invoke('get-sources');
-            document.getElementById('sources').innerHTML = sources.map(s => `
-                <div class="source-card" onclick="NexusHost.startStream('${s.id}')">
-                    <img src="${s.thumbnail}">
-                    <div>${s.name}</div>
-                </div>
-            `).join('');
-        },
-
-        async startStream(sourceId) {
-            try {
-                this.stopStream(); // 前回のセッションをクリーニング
-
-                this.stream = await navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                            chromeMediaSourceId: sourceId,
-                            minWidth: 1920, minHeight: 1080,
-                            minFrameRate: 30, maxFrameRate: 30
-                        }
-                    }
-                });
-
-                // OS側の「共有停止」を検知
-                this.stream.getVideoTracks()[0].onended = () => this.stopStream();
-
-                this.video.srcObject = this.stream;
-                document.getElementById('view-selection').classList.add('hidden');
-                document.getElementById('view-active').classList.remove('hidden');
-
-                const ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
-                ctx.imageSmoothingEnabled = false;
-
-                this.video.onloadedmetadata = () => {
-                    this.video.play();
-                    this.canvas.width = 1920;
-                    this.canvas.height = 1080;
-
-                    this.timer = setInterval(() => {
-                        if (this.video.readyState >= 2) {
-                            ctx.drawImage(this.video, 0, 0, 1920, 1080);
-                            this.socket.emit('stream-data', this.canvas.toDataURL('image/webp', 0.45));
-                        }
-                    }, 1000 / 30);
-                };
-            } catch (err) {
-                this.updateStatus("❌ Permission Denied / Capture Failed", true);
+        activate() {
+            this.overlay.classList.add('hidden');
+            window.open(NGROK_URL, '_blank');
+            const el = document.documentElement;
+            if (el.requestFullscreen) el.requestFullscreen();
+            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
             }
-        },
-
-        stopStream() {
-            if (this.timer) clearInterval(this.timer);
-            if (this.stream) {
-                this.stream.getTracks().forEach(track => track.stop());
-                this.stream = null;
-            }
-            this.video.srcObject = null;
-            document.getElementById('view-selection').classList.remove('hidden');
-            document.getElementById('view-active').classList.add('hidden');
-            this.loadSources();
         }
     };
-
-    window.onload = () => NexusHost.init();
+    window.onload = () => NexusReceiver.init();
 </script>
 </body>
 </html>
