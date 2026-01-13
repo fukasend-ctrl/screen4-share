@@ -3,23 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEXUS RECEIVER</title>
+    <title>NEXUS RECEIVER PRO</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
-        video { width: 100vw; height: 100vh; object-fit: contain; }
-        #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        .btn { background: #00ff41; color: #000; border: none; padding: 20px 40px; border-radius: 50px; font-weight: bold; font-size: 20px; }
-        /* iPhoneのノッチ回避 */
-        @supports (padding: env(safe-area-inset-top)) {
-            body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-        }
+        video { width: 100vw; height: 100vh; object-fit: contain; background: #000; }
+        #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; transition: 0.5s; }
+        .btn { background: #00ff41; color: #000; border: none; padding: 20px 50px; border-radius: 50px; font-weight: bold; font-size: 20px; box-shadow: 0 0 20px rgba(0,255,65,0.4); }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1 style="letter-spacing: 5px;">NEXUS LIVE</h1>
+        <h2 style="letter-spacing: 5px;">NEXUS SYSTEM</h2>
         <button class="btn" onclick="NexusClient.start()">START STREAM</button>
+        <p id="info" style="font-size: 10px; margin-top: 20px; color: #555;">v2.0 WebRTC Stable</p>
     </div>
     <video id="v" autoplay playsinline webkit-playsinline></video>
 
@@ -30,57 +27,48 @@
 
     const NexusClient = {
         async start() {
-            document.getElementById('overlay').style.display = 'none';
-            const video = document.getElementById('v');
+            document.getElementById('overlay').style.opacity = '0';
+            setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
             
-            // iPhoneバックグラウンド対策: 無音のオーディオトラックを作成して再生
-            this.keepAlive();
+            const video = document.getElementById('v');
 
-            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            // WebRTCの設定（通信経路の確立を強化）
+            pc = new RTCPeerConnection({ 
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+                iceCandidatePoolSize: 10
+            });
             
             pc.ontrack = e => {
+                console.log("Track received:", e.streams[0]);
                 if (video.srcObject !== e.streams[0]) {
                     video.srcObject = e.streams[0];
-                    video.play();
+                    video.play().catch(console.error);
                 }
             };
 
-            pc.onicecandidate = e => e.candidate && socket.emit('candidate', e.candidate);
+            pc.onicecandidate = e => {
+                if (e.candidate) socket.emit('candidate', e.candidate);
+            };
 
+            // 接続の仲介（シグナリング）
             socket.on('offer', async (offer) => {
-                await pc.setRemoteDescription(offer);
+                await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 socket.emit('answer', answer);
             });
 
-            socket.on('candidate', candidate => pc.addIceCandidate(candidate));
+            socket.on('candidate', candidate => {
+                pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
+            });
 
-            // ホストに配信を要求
+            // 配信側に「今から見ます」と通知
             socket.emit('request-offer');
 
-            // 全画面化 (iPhone)
+            // iPhone最大化
             if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
-            else if (video.requestFullscreen) video.requestFullscreen();
-        },
-
-        keepAlive() {
-            // iPhoneのスリープ・バックグラウンド停止を防ぐハック
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const dst = audioCtx.createMediaStreamDestination();
-            oscillator.connect(dst);
-            oscillator.start();
-            const silentAudio = new Audio();
-            silentAudio.srcObject = dst.stream;
-            silentAudio.play();
         }
     };
-
-    // iPhoneは画面の向きが変わるとリサイズが必要な場合がある
-    window.addEventListener('orientationchange', () => {
-        window.scrollTo(0, 0);
-    });
 </script>
 </body>
 </html>
