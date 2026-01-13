@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>NEXUS STREAMER PRO | HOST</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        :root { --neon: #00ff41; --danger: #ff4141; --bg: #0a0a0c; }
+        body { background: var(--bg); color: var(--neon); font-family: 'Consolas', 'Courier New', monospace; margin: 0; padding: 20px; overflow-x: hidden; }
+        #status-bar { border: 1px solid var(--neon); padding: 10px 20px; border-radius: 4px; font-size: 13px; margin-bottom: 25px; background: rgba(0,255,65,0.05); text-transform: uppercase; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
+        .source-card { background: #111; border: 1px solid #333; border-radius: 8px; padding: 10px; cursor: pointer; transition: 0.2s; }
+        .source-card:hover { border-color: var(--neon); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,255,65,0.2); }
+        .source-card img { width: 100%; border-radius: 4px; margin-bottom: 8px; }
+        .source-card div { font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #live-container { display: none; }
+        video { width: 100%; max-width: 800px; border: 1px solid #444; border-radius: 8px; background: #000; }
+        .btn-stop { margin-top: 20px; padding: 12px 30px; background: transparent; border: 1px solid var(--danger); color: var(--danger); border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-stop:hover { background: var(--danger); color: #000; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="status-bar">Initialize: System Ready</div>
+
+    <div id="view-selection">
+        <h2 style="font-size: 16px; letter-spacing: 2px;">SELECT BROADCAST SOURCE</h2>
+        <div id="sources" class="grid"></div>
+    </div>
+
+    <div id="view-active" class="hidden">
+        <div style="color: var(--danger); font-weight: bold; margin-bottom: 10px;">● LIVE TRANSMITTING (1080P/30FPS)</div>
+        <video id="preview" autoplay muted playsinline></video>
+        <br>
+        <button class="btn-stop" onclick="NexusHost.stopStream()">TERMINATE STREAM</button>
+    </div>
+
+    <canvas id="buffer" class="hidden"></canvas>
+
+<script>
+    const { ipcRenderer } = require('electron');
+
+    const NexusHost = {
+        socket: io('http://127.0.0.1:3000', { transports: ['websocket'], reconnection: true }),
+        stream: null,
+        timer: null,
+        video: document.getElementById('preview'),
+        canvas: document.getElementById('buffer'),
+        
+        async init() {
+            this.socket.on('connect', () => this.updateStatus("✅ Online: Server Connected"));
+            this.socket.on('connect_error', () => this.updateStatus("⚠️ Offline: Connection Failed", true));
+            this.loadSources();
+        },
+
+        updateStatus(msg, isErr = false) {
+            const bar = document.getElementById('status-bar');
+            bar.innerText = msg;
+            bar.style.borderColor = isErr ? 'var(--danger)' : 'var(--neon)';
+            bar.style.color = isErr ? 'var(--danger)' : 'var(--neon)';
+        },
+
+        async loadSources() {
+            const sources = await ipcRenderer.invoke('get-sources');
+            document.getElementById('sources').innerHTML = sources.map(s => `
+                <div class="source-card" onclick="NexusHost.startStream('${s.id}')">
+                    <img src="${s.thumbnail}">
+                    <div>${s.name}</div>
+                </div>
+            `).join('');
+        },
+
+        async startStream(sourceId) {
+            try {
+                this.stopStream(); // 前回のセッションをクリーニング
+
+                this.stream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        mandatory: {
+                            chromeMediaSource: 'desktop',
+                            chromeMediaSourceId: sourceId,
+                            minWidth: 1920, minHeight: 1080,
+                            minFrameRate: 30, maxFrameRate: 30
+                        }
+                    }
+                });
+
+                // OS側の「共有停止」を検知
+                this.stream.getVideoTracks()[0].onended = () => this.stopStream();
+
+                this.video.srcObject = this.stream;
+                document.getElementById('view-selection').classList.add('hidden');
+                document.getElementById('view-active').classList.remove('hidden');
+
+                const ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
+                ctx.imageSmoothingEnabled = false;
+
+                this.video.onloadedmetadata = () => {
+                    this.video.play();
+                    this.canvas.width = 1920;
+                    this.canvas.height = 1080;
+
+                    this.timer = setInterval(() => {
+                        if (this.video.readyState >= 2) {
+                            ctx.drawImage(this.video, 0, 0, 1920, 1080);
+                            this.socket.emit('stream-data', this.canvas.toDataURL('image/webp', 0.45));
+                        }
+                    }, 1000 / 30);
+                };
+            } catch (err) {
+                this.updateStatus("❌ Permission Denied / Capture Failed", true);
+            }
+        },
+
+        stopStream() {
+            if (this.timer) clearInterval(this.timer);
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
+                this.stream = null;
+            }
+            this.video.srcObject = null;
+            document.getElementById('view-selection').classList.remove('hidden');
+            document.getElementById('view-active').classList.add('hidden');
+            this.loadSources();
+        }
+    };
+
+    window.onload = () => NexusHost.init();
+</script>
+</body>
+</html>
