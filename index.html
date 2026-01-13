@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEXUS RECEIVER PRO</title>
+    <title>NEXUS RECEIVER</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
         video { width: 100vw; height: 100vh; object-fit: contain; }
         #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        .btn { background: #00ff41; color: #000; border: none; padding: 20px 50px; border-radius: 50px; font-weight: bold; font-size: 20px; }
+        .btn { background: #00ff41; color: #000; border: none; padding: 20px 50px; border-radius: 50px; font-weight: bold; font-size: 20px; box-shadow: 0 0 20px rgba(0,255,65,0.4); }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h2>NEXUS SYSTEM</h2>
+        <h2 style="letter-spacing: 5px;">NEXUS SYSTEM</h2>
         <button class="btn" onclick="NexusClient.start()">START STREAM</button>
     </div>
     <video id="v" autoplay playsinline webkit-playsinline></video>
@@ -29,8 +29,8 @@
             const video = document.getElementById('v');
             document.getElementById('overlay').style.display = 'none';
 
-            // 【バックグラウンド対策】無音のWebAudioを生成
-            this.enableBackgroundAudio();
+            // iOS/Androidのバックグラウンドプロセス凍結を回避
+            this.enableBackgroundMode();
 
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
             
@@ -52,25 +52,32 @@
             });
 
             socket.on('candidate', data => {
-                pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
+                pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
             });
 
             socket.emit('request-offer');
             if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
         },
 
-        enableBackgroundAudio() {
-            // iPhone/Androidでアプリを閉じても通信を維持させるためのハック
+        enableBackgroundMode() {
+            // 無音のAudioContextを走らせてOSに「メディア使用中」と認識させる
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioCtx.createOscillator();
             const dst = audioCtx.createMediaStreamDestination();
             oscillator.connect(dst);
             oscillator.start();
-            // 無音に近い非常に小さな音を再生し続ける
-            const silentTag = new Audio();
-            silentTag.srcObject = dst.stream;
-            silentTag.volume = 0.01; 
-            silentTag.play();
+            const silent = new Audio();
+            silent.srcObject = dst.stream;
+            silent.volume = 0.1;
+            silent.play();
+            
+            // タブが隠れた時の切断を防止
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    socket.connect();
+                    socket.emit('request-offer');
+                }
+            });
         }
     };
 </script>
