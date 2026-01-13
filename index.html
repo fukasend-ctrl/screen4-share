@@ -3,24 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEXUS RECEIVER</title>
+    <title>NEXUS RECEIVER PRO</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
         video { width: 100vw; height: 100vh; object-fit: contain; }
-        #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+        #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; text-align: center; }
         .btn { background: #00ff41; color: #000; border: none; padding: 20px 50px; border-radius: 50px; font-weight: bold; font-size: 20px; box-shadow: 0 0 20px rgba(0,255,65,0.4); }
     </style>
 </head>
 <body>
     <div id="overlay">
         <h2 style="letter-spacing: 5px;">NEXUS SYSTEM</h2>
-        <button class="btn" onclick="NexusClient.start()">START STREAM</button>
+        <button class="btn" onclick="NexusClient.start()">START STREAMING</button>
+        <p style="color:#555; font-size:10px; margin-top:15px;">Ultra Low Latency / Background Sync On</p>
     </div>
     <video id="v" autoplay playsinline webkit-playsinline></video>
 
 <script>
-    const CLOUD_URL = 'https://circle-sender-chrome-alter.trycloudflare.com';
+    const CLOUD_URL = 'https://sail-immunology-reed-expects.trycloudflare.com';
     const socket = io(CLOUD_URL, { transports: ['websocket'] });
     let pc;
 
@@ -28,12 +29,9 @@
         async start() {
             const video = document.getElementById('v');
             document.getElementById('overlay').style.display = 'none';
-
-            // iOS/Androidのバックグラウンドプロセス凍結を回避
             this.enableBackgroundMode();
 
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            
             pc.ontrack = e => {
                 if (video.srcObject !== e.streams[0]) {
                     video.srcObject = e.streams[0];
@@ -42,25 +40,20 @@
                 }
             };
 
-            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', { candidate: e.candidate }); };
-
+            pc.onicecandidate = e => e.candidate && socket.emit('candidate', { candidate: e.candidate });
             socket.on('offer', async (data) => {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 socket.emit('answer', { answer: answer });
             });
-
-            socket.on('candidate', data => {
-                pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
-            });
+            socket.on('candidate', data => pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {}));
 
             socket.emit('request-offer');
             if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
         },
 
         enableBackgroundMode() {
-            // 無音のAudioContextを走らせてOSに「メディア使用中」と認識させる
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioCtx.createOscillator();
             const dst = audioCtx.createMediaStreamDestination();
@@ -68,10 +61,8 @@
             oscillator.start();
             const silent = new Audio();
             silent.srcObject = dst.stream;
-            silent.volume = 0.1;
+            silent.volume = 0.05;
             silent.play();
-            
-            // タブが隠れた時の切断を防止
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') {
                     socket.connect();
