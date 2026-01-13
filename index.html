@@ -3,36 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEXUS RECEIVER PRO</title>
+    <title>NEXUS EXTREME RECEIVER</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-        #stream-img { width: 100vw; height: 100vh; object-fit: contain; }
-        #status { position: fixed; top: 10px; left: 10px; color: #00ff41; font-family: monospace; font-size: 10px; z-index: 100; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 3px; }
-        #overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: #000; color: #00ff41; cursor: pointer; font-family: sans-serif; }
+        #stream-img { width: 100vw; height: 100vh; object-fit: contain; image-rendering: -webkit-optimize-contrast; }
+        #status { position: fixed; top: 10px; left: 10px; color: #00ff41; font-family: monospace; font-size: 10px; background: rgba(0,0,0,0.7); padding: 5px; z-index: 10; }
+        #overlay { position: fixed; inset: 0; z-index: 1000; background: #000; color: #00ff41; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div id="status">SIGNAL STANDBY</div>
-    <div id="overlay">TAP TO RECEIVE STREAM</div>
+    <div id="status">INIT EXTREME ENGINE...</div>
+    <div id="overlay">TAP TO START 60FPS STREAM</div>
     <img id="stream-img">
 
 <script>
-    // ⚠️ CloudflareのURLに書き換えてください
     const URL = 'https://circle-sender-chrome-alter.trycloudflare.com';
-    
     const img = document.getElementById('stream-img');
     const status = document.getElementById('status');
     const overlay = document.getElementById('overlay');
 
     const socket = io(URL, { 
         transports: ['websocket'],
-        upgrade: false 
+        // 受信バッファの最適化
+        reconnection: true,
+        timeout: 20000
     });
 
-    socket.on('connect', () => status.innerText = "● LIVE (STABLE)");
+    socket.on('connect', () => status.innerText = "● 1080p 60FPS ONLINE");
     
-    // 受信データを即時反映
+    // データ受信
     socket.on('view-data', (data) => {
         img.src = data;
     });
@@ -40,6 +40,7 @@
     overlay.onclick = () => {
         overlay.style.display = 'none';
         if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
     };
 </script>
 </body>
