@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEXUS RECEIVER</title>
+    <title>NEXUS RECEIVER PRO</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
-        video { width: 100vw; height: 100vh; object-fit: contain; background: #000; }
+        video { width: 100vw; height: 100vh; object-fit: contain; }
         #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        .btn { background: #00ff41; color: #000; border: none; padding: 20px 50px; border-radius: 50px; font-weight: bold; font-size: 20px; box-shadow: 0 0 20px rgba(0,255,65,0.4); }
+        .btn { background: #00ff41; color: #000; border: none; padding: 20px 50px; border-radius: 50px; font-weight: bold; font-size: 20px; }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h2 style="letter-spacing: 5px;">NEXUS SYSTEM</h2>
+        <h2>NEXUS SYSTEM</h2>
         <button class="btn" onclick="NexusClient.start()">START STREAM</button>
     </div>
     <video id="v" autoplay playsinline webkit-playsinline></video>
 
 <script>
-    const CLOUD_URL = 'https://circle-sender-chrome-alter.trycloudflare.com'; // ⚠️最新に書き換え
+    const CLOUD_URL = 'https://circle-sender-chrome-alter.trycloudflare.com';
     const socket = io(CLOUD_URL, { transports: ['websocket'] });
     let pc;
 
@@ -28,7 +28,10 @@
         async start() {
             const video = document.getElementById('v');
             document.getElementById('overlay').style.display = 'none';
-            
+
+            // 【バックグラウンド対策】無音のWebAudioを生成
+            this.enableBackgroundAudio();
+
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
             
             pc.ontrack = e => {
@@ -39,21 +42,35 @@
                 }
             };
 
-            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', e.candidate); };
+            pc.onicecandidate = e => { if (e.candidate) socket.emit('candidate', { candidate: e.candidate }); };
 
-            socket.off('offer').on('offer', async (offer) => {
-                await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            socket.on('offer', async (data) => {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-                socket.emit('answer', answer);
+                socket.emit('answer', { answer: answer });
             });
 
-            socket.off('candidate').on('candidate', candidate => {
-                pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
+            socket.on('candidate', data => {
+                pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(console.error);
             });
 
             socket.emit('request-offer');
             if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+        },
+
+        enableBackgroundAudio() {
+            // iPhone/Androidでアプリを閉じても通信を維持させるためのハック
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const dst = audioCtx.createMediaStreamDestination();
+            oscillator.connect(dst);
+            oscillator.start();
+            // 無音に近い非常に小さな音を再生し続ける
+            const silentTag = new Audio();
+            silentTag.srcObject = dst.stream;
+            silentTag.volume = 0.01; 
+            silentTag.play();
         }
     };
 </script>
