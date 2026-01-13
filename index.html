@@ -2,72 +2,85 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEXUS MOBILE RECEIVER</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NEXUS RECEIVER</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
-        #v-container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-        #stream-img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        
-        /* YouTube風UI */
-        .controls { position: absolute; bottom: 30px; right: 20px; z-index: 100; }
-        .fs-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 10px; border-radius: 50%; width: 50px; height: 50px; font-size: 20px; backdrop-filter: blur(5px); }
-        
-        #overlay { position: fixed; inset: 0; z-index: 1000; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #00ff41; }
-        .start-btn { background: #00ff41; color: #000; border: none; padding: 15px 40px; border-radius: 30px; font-weight: bold; font-size: 18px; cursor: pointer; box-shadow: 0 0 20px rgba(0,255,65,0.4); }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
+        video { width: 100vw; height: 100vh; object-fit: contain; }
+        #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+        .btn { background: #00ff41; color: #000; border: none; padding: 20px 40px; border-radius: 50px; font-weight: bold; font-size: 20px; }
+        /* iPhoneのノッチ回避 */
+        @supports (padding: env(safe-area-inset-top)) {
+            body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+        }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1 style="margin-bottom:30px; letter-spacing:5px;">NEXUS SYSTEM</h1>
-        <button class="start-btn" onclick="startApp()">START STREAMING</button>
+        <h1 style="letter-spacing: 5px;">NEXUS LIVE</h1>
+        <button class="btn" onclick="NexusClient.start()">START STREAM</button>
     </div>
-
-    <div id="v-container">
-        <img id="stream-img">
-        <div class="controls">
-            <button class="fs-btn" onclick="toggleFS()">⛶</button>
-        </div>
-    </div>
+    <video id="v" autoplay playsinline webkit-playsinline></video>
 
 <script>
     const URL = 'https://circle-sender-chrome-alter.trycloudflare.com';
-    const img = document.getElementById('stream-img');
-    const overlay = document.getElementById('overlay');
-    let socket;
+    const socket = io(URL, { transports: ['websocket'] });
+    let pc;
 
-    function startApp() {
-        overlay.style.display = 'none';
-        
-        socket = io(URL, { 
-            transports: ['websocket'],
-            reconnection: true,
-            reconnectionAttempts: Infinity
-        });
+    const NexusClient = {
+        async start() {
+            document.getElementById('overlay').style.display = 'none';
+            const video = document.getElementById('v');
+            
+            // iPhoneバックグラウンド対策: 無音のオーディオトラックを作成して再生
+            this.keepAlive();
 
-        socket.on('view-data', (data) => {
-            img.src = data;
-        });
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            
+            pc.ontrack = e => {
+                if (video.srcObject !== e.streams[0]) {
+                    video.srcObject = e.streams[0];
+                    video.play();
+                }
+            };
 
-        // バックグラウンド復帰時の処理
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                socket.connect();
-            }
-        });
-    }
+            pc.onicecandidate = e => e.candidate && socket.emit('candidate', e.candidate);
 
-    function toggleFS() {
-        const el = document.documentElement;
-        if (!document.fullscreenElement) {
-            if (el.requestFullscreen) el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            screen.orientation.lock('landscape').catch(() => {});
-        } else {
-            document.exitFullscreen();
+            socket.on('offer', async (offer) => {
+                await pc.setRemoteDescription(offer);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit('answer', answer);
+            });
+
+            socket.on('candidate', candidate => pc.addIceCandidate(candidate));
+
+            // ホストに配信を要求
+            socket.emit('request-offer');
+
+            // 全画面化 (iPhone)
+            if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+            else if (video.requestFullscreen) video.requestFullscreen();
+        },
+
+        keepAlive() {
+            // iPhoneのスリープ・バックグラウンド停止を防ぐハック
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const dst = audioCtx.createMediaStreamDestination();
+            oscillator.connect(dst);
+            oscillator.start();
+            const silentAudio = new Audio();
+            silentAudio.srcObject = dst.stream;
+            silentAudio.play();
         }
-    }
+    };
+
+    // iPhoneは画面の向きが変わるとリサイズが必要な場合がある
+    window.addEventListener('orientationchange', () => {
+        window.scrollTo(0, 0);
+    });
 </script>
 </body>
 </html>
