@@ -6,56 +6,41 @@
     <title>NEXUS RECEIVER PRO</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; font-family: sans-serif; }
-        #stream-img { width: 100vw; height: 100vh; object-fit: contain; display: block; }
-        #status { position: fixed; top: 15px; left: 15px; color: #00ff41; font-size: 11px; z-index: 100; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; pointer-events: none; border-left: 3px solid #00ff41; font-family: monospace; }
-        #overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); color: #00ff41; cursor: pointer; flex-direction: column; transition: 0.5s; text-align: center; }
-        .pulse { animation: pulse 2s infinite; font-weight: bold; letter-spacing: 2px; }
-        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
-        .hidden { opacity: 0; pointer-events: none; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        #stream-img { width: 100vw; height: 100vh; object-fit: contain; }
+        #status { position: fixed; top: 10px; left: 10px; color: #00ff41; font-family: monospace; font-size: 10px; z-index: 100; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 3px; }
+        #overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: #000; color: #00ff41; cursor: pointer; font-family: sans-serif; }
     </style>
 </head>
 <body>
     <div id="status">SIGNAL STANDBY</div>
-    <div id="overlay">
-        <div class="pulse">TAP TO START SECURE STREAM</div>
-        <div style="font-size: 10px; margin-top: 10px; color: #666;">High-Quality 1080P/30FPS Mode</div>
-    </div>
+    <div id="overlay">TAP TO RECEIVE STREAM</div>
     <img id="stream-img">
+
 <script>
-    const NGROK_URL = 'https://circle-sender-chrome-alter.trycloudflare.com'; 
-    const NexusReceiver = {
-        socket: null,
-        img: document.getElementById('stream-img'),
-        status: document.getElementById('status'),
-        overlay: document.getElementById('overlay'),
-        init() {
-            this.socket = io(NGROK_URL, { 
-                transports: ['websocket'], 
-                reconnection: true,
-                extraHeaders: { "ngrok-skip-browser-warning": "true" }
-            });
-            this.socket.on('connect', () => { this.status.innerText = "● LIVE (CONNECTED)"; });
-            this.socket.on('view-data', (data) => {
-                this.img.src = data;
-                this.status.innerText = "● LIVE (RECEIVING)";
-            });
-            this.socket.on('connect_error', () => { this.status.innerText = "⚠️ SIGNAL LOST"; });
-            this.overlay.addEventListener('click', () => this.activate());
-        },
-        activate() {
-            this.overlay.classList.add('hidden');
-            window.open(NGROK_URL, '_blank');
-            const el = document.documentElement;
-            if (el.requestFullscreen) el.requestFullscreen();
-            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-            if (screen.orientation && screen.orientation.lock) {
-                screen.orientation.lock('landscape').catch(() => {});
-            }
-        }
+    // ⚠️ CloudflareのURLに書き換えてください
+    const URL = 'https://circle-sender-chrome-alter.trycloudflare.com';
+    
+    const img = document.getElementById('stream-img');
+    const status = document.getElementById('status');
+    const overlay = document.getElementById('overlay');
+
+    const socket = io(URL, { 
+        transports: ['websocket'],
+        upgrade: false 
+    });
+
+    socket.on('connect', () => status.innerText = "● LIVE (STABLE)");
+    
+    // 受信データを即時反映
+    socket.on('view-data', (data) => {
+        img.src = data;
+    });
+
+    overlay.onclick = () => {
+        overlay.style.display = 'none';
+        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
     };
-    window.onload = () => NexusReceiver.init();
 </script>
 </body>
 </html>
-
