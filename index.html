@@ -1,62 +1,49 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS PRO - ZERO LATENCY</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS RECEIVER</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        body { margin: 0; background: #000; overflow: hidden; height: 100vh; display: flex; align-items: center; }
         canvas { width: 100%; height: 100%; object-fit: contain; }
-        #status { position: fixed; top: 10px; left: 10px; color: #00ff41; font-family: monospace; z-index: 10; text-shadow: 1px 1px 2px #000; }
+        #status { position: fixed; top: 10px; left: 10px; color: #00ff41; font-family: monospace; z-index: 10; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div id="status">CONNECTING...</div>
-    <canvas id="view-canvas"></canvas>
+    <div id="status">INITIALIZING...</div>
+    <canvas id="view"></canvas>
 
     <script>
-        // ✅ 最新のトンネルURLをここに反映（末尾の / は不要）
+        // ✅ 最新のトンネルURLを反映
         const TUNNEL_URL = "https://visitor-loc-your-lower.trycloudflare.com";
-        
         const socket = io(TUNNEL_URL, { transports: ['websocket'] });
-        const canvas = document.getElementById('view-canvas');
+        const canvas = document.getElementById('view');
         const ctx = canvas.getContext('2d', { alpha: false });
         const status = document.getElementById('status');
         const img = new Image();
 
-        canvas.width = 1920; 
-        canvas.height = 1080;
-
+        canvas.width = 1920; canvas.height = 1080;
         let lastUrl = null;
 
-        socket.on('connect', () => {
-            status.innerText = "CONNECTED: WAITING FOR STREAM";
-        });
+        socket.on('connect', () => status.innerText = "CONNECTED: WAITING FOR STREAM");
+        socket.on('disconnect', () => status.innerText = "DISCONNECTED: RECONNECTING...");
 
         socket.on('view-stream', (data) => {
-            // 前のフレームのメモリを解放（フリーズ防止）
             if (lastUrl) URL.revokeObjectURL(lastUrl);
-            
             const blob = new Blob([data], { type: 'image/jpeg' });
             lastUrl = URL.createObjectURL(blob);
-            
             img.onload = () => {
                 ctx.drawImage(img, 0, 0);
-                status.innerText = "● LIVE - HQ 1080p";
+                status.innerText = "● LIVE - 1080p HQ";
             };
             img.src = lastUrl;
         });
 
         socket.on('stream-stopped', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            status.innerText = "STREAM STOPPED";
-        });
-
-        socket.on('disconnect', () => {
-            status.innerText = "DISCONNECTED";
+            status.innerText = "STREAM STOPPED BY HOST";
         });
     </script>
 </body>
 </html>
-
