@@ -1,43 +1,57 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS PLAYER HQ</title>
-    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS RECEIVER</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        canvas { width: 100%; height: 100%; object-fit: contain; }
+        #overlay { position: fixed; color: #00ff41; font-family: monospace; top: 10px; left: 10px; pointer-events: none; text-shadow: 1px 1px 2px #000; }
+    </style>
 </head>
-<body style="margin:0; background:#000;">
-    <div id="ui" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; background:#000;">
-        <button onclick="play()" style="padding:20px 50px; font-size:22px; background:#00ff41; border:none; border-radius:50px; font-weight:bold; cursor:pointer;">視聴開始（低遅延）</button>
-    </div>
-    <video id="v" class="video-js vjs-default-skin" style="width:100vw; height:100vh;" playsinline></video>
-    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
-    <script>
-        // ✅ 最新のURLを反映
-        const HLS_URL = "https://generator-brussels-derek-organize.trycloudflare.com/live/stream.m3u8";
+<body>
+    <div id="overlay">STREAM READY</div>
+    <canvas id="view-canvas"></canvas>
 
-        function play() {
-            document.getElementById('ui').style.display = 'none';
-            const player = videojs('v', { 
-                autoplay: true, 
-                controls: true, 
-                liveui: true,
-                liveTracker: { trackingThreshold: 0 } 
-            });
-            player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
+    <script>
+        // ✅ 最新のトンネルURLをここに反映してください
+        const TUNNEL_URL = "https://generator-brussels-derek-organize.trycloudflare.com";
+        const socket = io(TUNNEL_URL, { transports: ['websocket'] });
+        
+        const canvas = document.getElementById('view-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const overlay = document.getElementById('overlay');
+        const img = new Image();
+
+        canvas.width = 1920; 
+        canvas.height = 1080;
+
+        // メモリリーク防止のためURLオブジェクトを管理
+        let lastUrl = null;
+
+        socket.on('view-stream', (data) => {
+            if (lastUrl) URL.revokeObjectURL(lastUrl);
             
-            // 強制シークで遅延を極限まで削る
-            player.on('play', () => {
-                setInterval(() => {
-                    if (player.liveTracker && !player.liveTracker.atLiveEdge()) {
-                        const delay = player.duration() - player.currentTime();
-                        // 2秒以上遅れていたら最新地点へジャンプ
-                        if (delay > 2) {
-                            player.currentTime(player.duration() - 0.5);
-                        }
-                    }
-                }, 1000);
-            });
-        }
+            const blob = new Blob([data], { type: 'image/jpeg' });
+            lastUrl = URL.createObjectURL(blob);
+            
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0);
+                overlay.innerText = "● LIVE - 1080p ZeroLatency";
+            };
+            img.src = lastUrl;
+        });
+
+        socket.on('stream-stopped', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            overlay.innerText = "STREAM STOPPED";
+        });
+
+        socket.on('connect_error', () => {
+            overlay.innerText = "CONNECTION ERROR";
+        });
     </script>
 </body>
 </html>
