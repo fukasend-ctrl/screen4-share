@@ -2,82 +2,57 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEXUS RECEIVER</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>NEXUS PLAYER</title>
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
-        video { width: 100vw; height: 100vh; object-fit: contain; }
-        #overlay { position: fixed; inset: 0; background: #000; color: #00ff41; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        .btn { background: #00ff41; color: #000; border: none; padding: 25px 60px; border-radius: 50px; font-weight: bold; font-size: 22px; cursor: pointer; box-shadow: 0 0 30px rgba(0,255,65,0.4); transition: 0.3s; }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        .video-js { width: 100vw; height: 100vh; }
+        #nexus-ui { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #000; color: #00ff41; text-align: center; }
+        .start-btn { background: #00ff41; color: #000; border: none; padding: 20px 60px; border-radius: 50px; font-weight: bold; font-size: 20px; box-shadow: 0 0 30px rgba(0,255,65,0.4); }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <h1 style="letter-spacing: 8px; margin-bottom: 40px;">NEXUS LIVE</h1>
-        <button class="btn" onclick="NexusClient.start()">TAP TO WATCH</button>
-        <p style="color: #444; font-size: 12px; margin-top: 20px;">Ultra Low Latency Mode</p>
+    <div id="nexus-ui">
+        <div>
+            <h1 style="letter-spacing:10px;">NEXUS LIVE</h1>
+            <button class="start-btn" onclick="initPlayer()">視聴開始</button>
+        </div>
     </div>
-    <video id="v" autoplay playsinline webkit-playsinline></video>
 
-<script>
-    // ⚠️ Cloudflareで発行された最新のURLに書き換えてください
-    const CLOUD_URL = 'https://sail-immunology-reed-expects.trycloudflare.com';
-    const socket = io(CLOUD_URL, { transports: ['websocket'] });
-    let pc;
+    <video id="v-player" class="video-js vjs-big-play-centered" playsinline webkit-playsinline></video>
 
-    const NexusClient = {
-        async start() {
-            const video = document.getElementById('v');
-            
-            // 異音(ピー音)を物理的に発生させない無音処理
-            this.keepAlive();
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script>
+        // ⚠️ Cloudflareで発行された最新のURL + /live/stream.m3u8 に書き換えてください
+        const HLS_URL = "https://sail-immunology-reed-expects.trycloudflare.com/live/stream.m3u8";
 
-            document.getElementById('overlay').style.opacity = '0';
-            setTimeout(() => document.getElementById('overlay').style.display = 'none', 500);
-
-            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            
-            pc.ontrack = e => {
-                if (video.srcObject !== e.streams[0]) {
-                    video.srcObject = e.streams[0];
-                    video.muted = false;
-                    video.play().catch(() => {
-                        video.muted = true;
-                        video.play();
-                    });
-                }
-            };
-
-            pc.onicecandidate = e => e.candidate && socket.emit('candidate', { candidate: e.candidate });
-
-            socket.on('offer', async data => {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit('answer', { answer: answer });
+        function initPlayer() {
+            document.getElementById('nexus-ui').style.display = 'none';
+            const player = videojs('v-player', {
+                controls: true,
+                autoplay: true,
+                liveui: true,
+                responsive: true,
+                sources: [{ src: HLS_URL, type: 'application/x-mpegURL' }]
             });
 
-            socket.on('candidate', data => pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e=>{}));
+            // Media Session API（バックグラウンド・ロック画面操作）
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: 'NEXUS STREAMING',
+                    artist: 'LIVE',
+                    artwork: [{ src: 'https://via.placeholder.com/512', sizes: '512x512', type: 'image/png' }]
+                });
+                navigator.mediaSession.setActionHandler('play', () => player.play());
+                navigator.mediaSession.setActionHandler('pause', () => player.pause());
+            }
 
-            socket.emit('request-offer');
-            
-            // iPhone全画面化
-            if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
-        },
-
-        keepAlive() {
-            // OSのサスペンドを回避するための無音オーディオ
-            try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const dst = audioCtx.createMediaStreamDestination();
-                const silent = new Audio();
-                silent.srcObject = dst.stream;
-                silent.play().catch(()=>{});
-            } catch(e) {}
+            // iPhoneでスリープしても再生を維持するための処理
+            player.on('play', () => {
+                if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{});
+            });
         }
-    };
-</script>
+    </script>
 </body>
 </html>
