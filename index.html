@@ -7,13 +7,13 @@
 </head>
 <body style="margin:0; background:#000;">
     <div id="ui" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; background:#000;">
-        <button onclick="play()" style="padding:20px 50px; font-size:22px; background:#00ff41; border:none; border-radius:50px; font-weight:bold; cursor:pointer;">視聴開始</button>
+        <button onclick="play()" style="padding:20px 50px; font-size:22px; background:#00ff41; border:none; border-radius:50px; font-weight:bold; cursor:pointer;">視聴開始（低遅延）</button>
     </div>
     <video id="v" class="video-js vjs-default-skin" style="width:100vw; height:100vh;" playsinline></video>
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     <script>
-        // ✅ 最新のトンネルURL
-        const HLS_URL = "https://jesse-swim-theft-unto.trycloudflare.com/live/stream.m3u8";
+        // ✅ 最新のURLを反映
+        const HLS_URL = "https://generator-brussels-derek-organize.trycloudflare.com/live/stream.m3u8";
 
         function play() {
             document.getElementById('ui').style.display = 'none';
@@ -25,11 +25,16 @@
             });
             player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
             
-            // 強制シークで遅延を詰める
+            // 強制シークで遅延を極限まで削る
             player.on('play', () => {
                 setInterval(() => {
-                    const delay = player.duration() - player.currentTime();
-                    if (delay > 2) player.currentTime(player.duration() - 0.5);
+                    if (player.liveTracker && !player.liveTracker.atLiveEdge()) {
+                        const delay = player.duration() - player.currentTime();
+                        // 2秒以上遅れていたら最新地点へジャンプ
+                        if (delay > 2) {
+                            player.currentTime(player.duration() - 0.5);
+                        }
+                    }
                 }, 1000);
             });
         }
