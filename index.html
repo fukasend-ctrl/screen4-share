@@ -14,14 +14,14 @@
 </head>
 <body>
     <div id="nexus-ui">
-        <button class="start-btn" onclick="initPlayer()">視聴開始（高画質・低遅延）</button>
+        <button class="start-btn" onclick="initPlayer()">視聴開始</button>
     </div>
     <video id="v-player" class="video-js vjs-big-play-centered" playsinline webkit-playsinline></video>
 
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     <script>
-        // ✅ 最新のURLに更新済み
-        const HLS_URL = "https://switch-aware-sandwich-johnny.trycloudflare.com/live/stream.m3u8";
+        // ✅ 最新のトンネルURLに更新済み
+        const HLS_URL = "https://mainstream-customise-treasury-risks.trycloudflare.com/live/stream.m3u8";
 
         function initPlayer() {
             document.getElementById('nexus-ui').style.display = 'none';
@@ -35,10 +35,8 @@
 
             player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
 
-            // 遅延を削るロジック：3秒以上遅れたら最新地点へジャンプ
             player.on('play', () => {
                 setInterval(() => {
-                    if (player.liveTracker && player.liveTracker.atLiveEdge()) return;
                     const currentDelay = player.duration() - player.currentTime();
                     if (currentDelay > 3) {
                         player.currentTime(player.duration() - 1);
