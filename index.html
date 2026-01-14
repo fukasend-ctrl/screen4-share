@@ -2,26 +2,37 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS FINAL PLAYER</title>
+    <title>NEXUS PLAYER HQ</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    <style>body { margin: 0; background: #000; } .video-js { width: 100vw; height: 100vh; }</style>
 </head>
-<body>
+<body style="margin:0; background:#000;">
     <div id="ui" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; background:#000;">
-        <button onclick="play()" style="padding:20px 60px; font-size:24px; background:#00ff41; border:none; border-radius:50px; font-weight:bold; cursor:pointer;">視聴開始</button>
+        <button onclick="play()" style="padding:20px 50px; font-size:22px; background:#00ff41; border:none; border-radius:50px; font-weight:bold; cursor:pointer;">視聴開始</button>
     </div>
-    <video id="v" class="video-js vjs-default-skin" playsinline></video>
+    <video id="v" class="video-js vjs-default-skin" style="width:100vw; height:100vh;" playsinline></video>
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     <script>
-        // ✅ 最新のトンネルURLを反映済み
+        // ✅ 最新のトンネルURL
         const HLS_URL = "https://jesse-swim-theft-unto.trycloudflare.com/live/stream.m3u8";
 
         function play() {
             document.getElementById('ui').style.display = 'none';
-            const player = videojs('v', { autoplay: true, controls: true, liveui: true });
+            const player = videojs('v', { 
+                autoplay: true, 
+                controls: true, 
+                liveui: true,
+                liveTracker: { trackingThreshold: 0 } 
+            });
             player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
+            
+            // 強制シークで遅延を詰める
+            player.on('play', () => {
+                setInterval(() => {
+                    const delay = player.duration() - player.currentTime();
+                    if (delay > 2) player.currentTime(player.duration() - 0.5);
+                }, 1000);
+            });
         }
     </script>
 </body>
 </html>
-
