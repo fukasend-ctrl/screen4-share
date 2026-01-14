@@ -1,48 +1,23 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>NEXUS LOW-LATENCY PLAYER</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS FINAL PLAYER</title>
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-        .video-js { width: 100vw; height: 100vh; }
-        #nexus-ui { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: #000; color: #00ff41; }
-        .start-btn { background: #00ff41; color: #000; border: none; padding: 20px 60px; border-radius: 50px; font-weight: bold; font-size: 20px; box-shadow: 0 0 30px rgba(0,255,65,0.4); cursor: pointer; }
-    </style>
+    <style>body { margin: 0; background: #000; } .video-js { width: 100vw; height: 100vh; }</style>
 </head>
 <body>
-    <div id="nexus-ui">
-        <button class="start-btn" onclick="initPlayer()">視聴開始</button>
+    <div id="ui" style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; background:#000;">
+        <button onclick="play()" style="padding:20px 60px; font-size:24px; background:#00ff41; border:none; border-radius:50px; font-weight:bold; cursor:pointer;">視聴開始</button>
     </div>
-    <video id="v-player" class="video-js vjs-big-play-centered" playsinline webkit-playsinline></video>
-
+    <video id="v" class="video-js vjs-default-skin" playsinline></video>
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     <script>
-        // ✅ 最新のトンネルURLに更新済み
         const HLS_URL = "https://mainstream-customise-treasury-risks.trycloudflare.com/live/stream.m3u8";
-
-        function initPlayer() {
-            document.getElementById('nexus-ui').style.display = 'none';
-            const player = videojs('v-player', {
-                controls: true,
-                autoplay: true,
-                liveui: true,
-                fluid: true,
-                html5: { vhs: { overrideNative: true, enableLowInitialPlaylist: true } }
-            });
-
+        function play() {
+            document.getElementById('ui').style.display = 'none';
+            const player = videojs('v', { autoplay: true, controls: true, liveui: true });
             player.src({ src: HLS_URL, type: 'application/x-mpegURL' });
-
-            player.on('play', () => {
-                setInterval(() => {
-                    const currentDelay = player.duration() - player.currentTime();
-                    if (currentDelay > 3) {
-                        player.currentTime(player.duration() - 1);
-                    }
-                }, 2000);
-            });
         }
     </script>
 </body>
