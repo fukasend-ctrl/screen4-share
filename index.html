@@ -1,41 +1,74 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS RECEIVER</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS PRO Viewer</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>body{margin:0;background:#000;height:100vh;display:flex;align-items:center;} canvas{width:100%;height:100%;object-fit:contain;}</style>
+    <style>
+        :root { --accent: #00e676; --bg-dark: #121212; --text-light: #e0e0e0; }
+        body { margin: 0; background-color: var(--bg-dark); height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        canvas { width: 100%; height: 100%; object-fit: contain; }
+        #status-display { 
+            position: fixed; top: 15px; left: 15px; 
+            color: var(--text-light); background-color: rgba(0,0,0,0.6); 
+            padding: 8px 15px; border-radius: 5px; 
+            font-family: 'Roboto Mono', monospace; font-size: 1.1em;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        #status-icon { width: 10px; height: 10px; border-radius: 50%; background-color: #ffc107; } /* Yellow for connecting */
+        .status-connecting #status-icon { background-color: #ffc107; }
+        .status-live #status-icon { background-color: var(--accent); }
+        .status-stopped #status-icon { background-color: #f44336; }
+        .status-disconnected #status-icon { background-color: #9e9e9e; }
+    </style>
 </head>
 <body>
-    <div id="stat" style="position:fixed;top:10px;left:10px;color:#00ff41;font-family:monospace;z-index:10;text-shadow:1px 1px 2px #000;">CONNECTING...</div>
-    <canvas id="view"></canvas>
+    <div id="status-display">
+        <span id="status-icon"></span>
+        <span id="status-text">CONNECTING...</span>
+    </div>
+    <canvas id="viewer-canvas"></canvas>
+
 <script>
-    // ✅ 最新のURLを反映済み
+    // ✅ 現在のトンネルURLを反映 (末尾に '/' は不要)
     const TUNNEL_URL = "https://spirits-scan-essay-mode.trycloudflare.com";
     
-    const socket = io(TUNNEL_URL, { transports: ['websocket'] });
-    const canvas = document.getElementById('view');
-    const ctx = canvas.getContext('2d', { alpha: false });
+    // Socket.io接続: 再接続ロジックを強化
+    const socket = io(TUNNEL_URL, { 
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000 
+    });
+
+    const viewerCanvas = document.getElementById('viewer-canvas');
+    const ctx = viewerCanvas.getContext('2d', { alpha: false });
+    const statusText = document.getElementById('status-text');
+    const statusDisplay = document.getElementById('status-display');
     const img = new Image();
-    let lastUrl = null;
+    let lastObjectUrl = null;
 
-    canvas.width = 1280; canvas.height = 720;
+    viewerCanvas.width = 1920; 
+    viewerCanvas.height = 1080;
 
-    socket.on('connect', () => document.getElementById('stat').innerText = "CONNECTED");
-    socket.on('view-stream', (data) => {
-        if (lastUrl) URL.revokeObjectURL(lastUrl);
-        const blob = new Blob([data], { type: 'image/jpeg' });
-        lastUrl = URL.createObjectURL(blob);
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0, 1280, 720);
-            document.getElementById('stat').innerText = "● LIVE";
-        };
-        img.src = lastUrl;
-    });
-    socket.on('stream-stopped', () => {
-        ctx.clearRect(0,0,1280,720);
-        document.getElementById('stat').innerText = "STREAM STOPPED";
-    });
-</script>
-</body>
-</html>
+    // ステータス表示を更新するヘルパー関数
+    function updateStatus(text, className) {
+        statusText.innerText = text;
+        statusDisplay.className = ''; // クラスをリセット
+        statusDisplay.classList.add(className);
+    }
+
+    // Socket.ioイベントハンドリング
+    socket.on('connect', () => updateStatus('CONNECTED', 'status-connecting'));
+    socket.on('disconnect', () => updateStatus('DISCONNECTED', 'status-disconnected'));
+    socket.on('connect_error', (err) => updateStatus(`ERROR: ${err.message}`, 'status-disconnected'));
+
+    // サーバーからのストリーム状態通知
+    socket.on('stream-status', (data) => {
+        if (data.type === 'start') {
+            updateStatus('CONNECTED: WAITING FOR STREAM', 'status-connecting');
+        } else if (data.type === 'stop') {
+            update
