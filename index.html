@@ -2,45 +2,40 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEXUS PLAYER - ZERO LATENCY</title>
+    <title>NEXUS RECEIVER</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        body{margin:0;background:#000;height:100vh;display:flex;align-items:center;overflow:hidden;} 
-        canvas{width:100%;height:100%;object-fit:contain;}
-        #stat{position:fixed;top:10px;left:10px;color:#00ff41;font-family:monospace;z-index:10;text-shadow:1px 1px 2px #000;}
-    </style>
+    <style>body{margin:0;background:#000;height:100vh;display:flex;align-items:center;} canvas{width:100%;height:100%;object-fit:contain;}</style>
 </head>
 <body>
-    <div id="stat">CONNECTING...</div>
+    <div id="stat" style="position:fixed;top:10px;left:10px;color:#00ff41;font-family:monospace;z-index:10;text-shadow:1px 1px 2px #000;">CONNECTING...</div>
     <canvas id="view"></canvas>
 <script>
-    // ✅ 最新のトンネルURLを反映済み
-    const TUNNEL_URL = "https://thereafter-excel-fighter-glucose.trycloudflare.com";
+    // ✅ 最新のURLを反映済み
+    const TUNNEL_URL = "https://spirits-scan-essay-mode.trycloudflare.com";
     
-    const socket = io(TUNNEL_URL, { transports: ['websocket'], reconnection: true });
+    const socket = io(TUNNEL_URL, { transports: ['websocket'] });
     const canvas = document.getElementById('view');
     const ctx = canvas.getContext('2d', { alpha: false });
     const img = new Image();
     let lastUrl = null;
 
-    canvas.width = 1920; canvas.height = 1080;
+    canvas.width = 1280; canvas.height = 720;
 
-    socket.on('connect', () => document.getElementById('stat').innerText = "CONNECTED: READY");
+    socket.on('connect', () => document.getElementById('stat').innerText = "CONNECTED");
     socket.on('view-stream', (data) => {
         if (lastUrl) URL.revokeObjectURL(lastUrl);
         const blob = new Blob([data], { type: 'image/jpeg' });
         lastUrl = URL.createObjectURL(blob);
         img.onload = () => {
-            ctx.drawImage(img, 0, 0, 1920, 1080);
-            document.getElementById('stat').innerText = "● LIVE - HQ 1080p";
+            ctx.drawImage(img, 0, 0, 1280, 720);
+            document.getElementById('stat').innerText = "● LIVE";
         };
         img.src = lastUrl;
     });
     socket.on('stream-stopped', () => {
-        ctx.clearRect(0,0,1920,1080);
-        document.getElementById('stat').innerText = "STREAM STOPPED BY HOST";
+        ctx.clearRect(0,0,1280,720);
+        document.getElementById('stat').innerText = "STREAM STOPPED";
     });
-    socket.on('disconnect', () => document.getElementById('stat').innerText = "DISCONNECTED");
 </script>
 </body>
 </html>
